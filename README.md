@@ -87,7 +87,10 @@ New-Item -ItemType Junction -Path 'D:\kcpm' -Target 'D:\口袋CPM\project'
 
 安装 APK 后，需在「设置 → 模型包 → 导入 .zip」导入模型包（约 1.8 GB），完成后即可离线对话。详细步骤见 [docs/04-使用说明.md](docs/04-使用说明.md)。
 
-安装包与模型包体积较大，不放进仓库，随 Release 附带。
+安装包与模型包体积较大，不放进仓库，随 Release 附带：
+
+- 下载页：<https://github.com/wtbysq/koudai-CPM/releases/tag/v1.0.0>
+- `koudai-cpm-1.0.0-lite.apk`（17 MB）· `koudai-models-1.0.0.zip`（1.79 GB）· `koudai-voices-1.0.0.zip`（476 MB）
 
 ## 技术要点
 
