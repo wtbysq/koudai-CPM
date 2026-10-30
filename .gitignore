@@ -1,0 +1,45 @@
+# 只提交源码：模型、工具链、二进制、构建产物、密钥一律忽略
+
+# ---- 工程内的构建产物与依赖 ----
+project/out/
+project/build/
+project/app-ocl/
+project/speech/
+project/sdk/
+project/jdk-*/
+project/android-ndk-*/
+project/cmake-*/
+project/llama.cpp-*/
+project/w64/
+project/vulkan-headers/
+project/opencl-headers/
+project/opencl-stub/
+project/spirv-*/
+project/tools/_archive/
+project/tools/classes/
+
+# ---- 密钥与证书（绝不入库）----
+project/app/koudai.keystore
+*.keystore
+*.jks
+.certs/
+*.pem
+*.key
+*.p12
+
+# ---- 分发与测试产物 ----
+dist/
+testbed/
+*.apk
+*.idsig
+*.zip
+
+# ---- 工作区元数据 ----
+.workbuddy/
+
+# ---- 通用忽略 ----
+Thumbs.db
+.DS_Store
+desktop.ini
+*.log
+*.tmp

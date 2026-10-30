@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.koudai.cpm"
+    android:versionCode="39"
+    android:versionName="1.0.0">
+
+    <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="34" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 仅 Android 9 及以下写 Download/口袋CPM 需要；10 以上走 MediaStore 不需要权限 -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!-- Android 11+ 包可见性：不声明就看不到厂商的语音识别/TTS 引擎（日志里的 AppsFilter BLOCKED） -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="口袋CPM"
+        android:icon="@drawable/ic_launcher"
+        android:extractNativeLibs="true"
+        android:hardwareAccelerated="true"
+        android:debuggable="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <!-- 厂商 libOpenCL 虽在 public.libraries.txt，App 必须显式声明才能加入自己的命名空间 -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 切后台/锁屏时保住引擎进程 -->
+        <service
+            android:name=".EngineService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- 拍照输出用的极简 content provider -->
+        <provider
+            android:name=".ShotProvider"
+            android:authorities="com.koudai.cpm.shots"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>
