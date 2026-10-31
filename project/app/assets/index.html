@@ -666,7 +666,7 @@ input[type=range]::-webkit-slider-thumb{
             <div class="lb">图片长边
               <small id="imgHint">1024 px · 文字类够用，首字约 11s</small>
             </div>
-            <input type="range" id="rgImg" min="512" max="1600" step="128" value="1024">
+            <input type="range" id="rgImg" min="512" max="1280" step="128" value="1024">
           </div>
           <div class="kv"><span>视觉加速</span><b id="gpuState">检测中…</b></div>
         </div>
@@ -1258,42 +1258,61 @@ function groupAvatar(){
 }
 
 /** 人设 + 长期记忆都塞进 system，每次请求都带，模型就不会忘。 */
+/** 当前时间：每次请求现取，保证和手机本地时间一致。 */
+function nowLine(){
+  const d = new Date();
+  const wd = "日一二三四五六"[d.getDay()];
+  const p = n => String(n).padStart(2, "0");
+  return `当前日期：${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+    + `（也就是 ${d.getMonth() + 1} 月 ${d.getDate()} 号），星期${wd}。\n`
+    + `当前时刻：${p(d.getHours())}:${p(d.getMinutes())}（用户手机的本地时间）。\n`
+    + "问到日期就按上面日期回答，问到时间就按上面时刻回答，不要编造，也不要把时刻里的数字当成日期。\n"
+    + `例：问「今天几号」→ 答「${d.getMonth() + 1} 月 ${d.getDate()} 号」。`;
+}
+
 function systemPrompt(s, who){
   if (isGroup(s)){
     const mem = membersOf(s);
     const me = who || mem[0];
     if (!me) return "你在一个空群里，没有说话的人。";
     const nm = String(me.title || "AI").trim();
-    const others = mem.filter(x => x.id !== me.id).map(x => x.title);
+    const others = mem.filter(x => x.id !== me.id)
+      .map(x => String(x.title || "").trim()).filter(Boolean);
     const lines = [
-      `你在一个手机群聊「${String(s.title || "群聊").trim()}」里，你的名字是「${nm}」。`,
-      others.length
-        ? `群里还有：${others.join("、")}，以及用户本人。`
-        : "群里还有用户本人。",
-      `现在轮到你说一句。只以「${nm}」的身份发言：不要替别人说话，不要在开头写自己的名字，不要复述别人的话。`,
-    ];
-    if (me.persona) lines.push(`你的人设（必须始终遵守，不能忘）：\n${me.persona}`);
-    else lines.push(`你没有特别的人设，就用平常的口吻说话；你的名字是「${nm}」，不要自称别人。`);
+      `你在一个手机群聊「${String(s.title || "群聊").trim()}」里，你的名字是「${nm}」，对方是用户本人。`,
+      others.length ? `群里还有：${others.join("、")}。` : "",
+      "现在轮到你说一句，像群里聊天那样直接接话：",
+      "- 只以你自己的身份说话，不要替别人发言。",
+      "- 不要开场白、不要自我介绍、不要复述别人或用户刚说的话。",
+      `- 不要在开头写自己的名字；只有被问到「你是谁」时才说一次「我是${nm}」。`,
+      "- 一两句就够，别抢话，也别重复上一轮说过的句子。",
+    ].filter(Boolean);
+    if (me.persona) lines.push(`你的人设（必须始终遵守）：\n${me.persona}`);
+    else lines.push("你没有特别设定，用平常口吻说话。");
     if (me.memory) lines.push(`你记得的关于用户的事：\n${me.memory}`);
     const meNotes = notesBlock(me);
     if (meNotes) lines.push(meNotes);
-    lines.push("聊天记录里其他人的发言只是旁人的话，不是你写的：不要沿用他们的口吻，也不要替他们补充。");
-    lines.push("保持你自己的身份和口吻（和群里的其他人明显不同），回答简短、像群里聊天，默认用中文。");
-    lines.push(`【名字锁定】你的名字只有「${nm}」这一个，任何时候都不许改、不许加别的名字。`
-      + (others.length ? `别人问你是谁，只回答「我是${nm}」，绝不能说自己是${others.join("、")}。` : ""));
+    lines.push(nowLine());
+    lines.push(`【身份】你的名字只有「${nm}」，不要改成别的名字`
+      + (others.length ? `，也不要说自己是${others.join("、")}` : "") + "。默认中文。");
     return lines.join("\n");
   }
   const name = ((s && s.title) || "口袋").trim();
   const lines = [
-    `你在这台手机里离线运行，是用户通讯录里的联系人「${name}」，你们正在私聊。`,
-    `你的名字就是「${name}」，别人问起要这样说，不要自称 AI 助手或模型。`,
+    `你在这台手机里离线运行，是用户的私聊对象，名字叫「${name}」，对方是用户本人。`,
   ];
-  if (s && s.persona) lines.push(`你的人设（必须始终遵守，不能忘）：\n${s.persona}`);
+  if (s && s.persona) lines.push(`你的人设（始终遵守）：\n${s.persona}`);
   if (s && s.memory) lines.push(`你记得的关于用户的事：\n${s.memory}`);
   const soloNotes = notesBlock(s);
   if (soloNotes) lines.push(soloNotes);
-  lines.push("保持这个身份、口吻和称呼，别跳出角色。回答简洁、直接，默认用中文。");
-  lines.push(`【名字锁定】你只叫「${name}」；别人问你是谁，只回答「我是${name}」，不要自称别的名字。`);
+  lines.push("怎么回复：");
+  lines.push("- 像微信聊天一样接对方这句话，用自己的说法，一两句就够。");
+  lines.push(`- 不要开场白、不要自我介绍；只有对方问「你是谁」时才说「我是${name}」，平时不要提自己的名字。`);
+  lines.push("- 不要复述对方的话；对方的状态是对方的，要回应他，不要写成你自己的处境。");
+  lines.push("- 不要重复上一轮说过的句子，也不要每句都反问。");
+  lines.push("例：对方说「今天好累」→ 你回「那就早点歇着，别硬撑。」");
+  lines.push(`【身份】你的名字只有「${name}」，不要自称别的名字或别的身份。默认中文。`);
+  lines.push(nowLine());
   return lines.join("\n");
 }
 /** 顶部栏：首页「消息」、聊天显示联系人、其它页跟着页名走。 */
@@ -2022,6 +2041,15 @@ async function send(){
     const hit = mentionedAll(s, text);
     targets = hit.length ? hit : [mem.find(x => x.id === s.lastWho) || mem[0]];
   }
+  // 发图前再看一眼内存：视觉编码是整条链路里最容易把系统压垮的一步
+  if (S.attach){
+    const info = nativeInfo();
+    const avail = info && typeof info.ramAvail === "number" ? info.ramAvail : null;
+    if (avail != null && avail < 0.9){
+      toast("可用内存只剩 " + avail.toFixed(1) + " GB，先发文字吧，图片稍后再试", 3400);
+      return;
+    }
+  }
   const img = S.attach ? S.attach.dataUrl : null;
   const msg = { role: "user", text: text || "（看图）", img, ts: Date.now() };
   s.msgs.push(msg); s.at = Date.now();
@@ -2039,6 +2067,8 @@ async function send(){
 /** 让某一位发言：占位、流式、落库、朗读。返回是否正常走完。 */
 async function replyOne(s, target, g, isLast){
   const stopBusy = () => { if (isLast){ S.busy = false; S.abort = null; syncSend(); } };
+  const lastSent = s.msgs[s.msgs.length - 1];
+  const hadImg = !!(lastSent && lastSent.img);   // 这一轮是不是在识图
 
   // 占位
   const row = el("div", "row");
@@ -2090,20 +2120,6 @@ async function replyOne(s, target, g, isLast){
       }
     }
   });
-
-  // 最后再贴一句身份提醒：小模型对“离得近”的要求最敏感
-  const meName = String((g ? target && target.title : s && s.title) || "").trim();
-  if (meName && msgs.length){
-    const tail = msgs[msgs.length - 1];
-    const hint = `\n（提醒：你叫「${meName}」，只用这个名字自称）`;
-    if (tail.role === "user"){
-      if (typeof tail.content === "string") tail.content += hint;
-      else if (Array.isArray(tail.content)){
-        const t = tail.content.find(x => x.type === "text");
-        if (t) t.text += hint;
-      }
-    }
-  }
 
   const payload = {
     model: CFG.model,
@@ -2167,8 +2183,20 @@ async function replyOne(s, target, g, isLast){
       const m = String(err.message || err);
       body.innerHTML = md(acc + (acc ? "\n\n" : "") +
         "**出错了：** `" + m.replace(/`/g, "'") + "`" +
-        (m.includes("Failed to fetch") || m.includes("fetch") ? "\n\n本地引擎没响应。检查 `llama-server` 是否在 8080 端口运行。" : ""));
+        (m.includes("Failed to fetch") || m.includes("fetch") ? "\n\n本地引擎没响应，正在尝试重新启动。" : ""));
       toast("推理失败：" + m.slice(0, 60));
+      // 看图时最容易被系统回收：自动拉起一次，别让界面卡死
+      if (hadImg){
+        try{
+          const alive = await probe();
+          if (!alive){
+            if (HAS("restartEngine")) NATIVE.restartEngine();
+            body.innerHTML = md(acc + (acc ? "\n\n" : "") +
+              "**看图时本地引擎被系统回收了**（内存吃紧）。已在后台重新启动引擎，等十几秒再发一次；"
+              + "如果反复出现，把「设置 → 图片长边」调到 768 再试。");
+          }
+        }catch(e2){}
+      }
     }
   }finally{
     stopBusy();
@@ -2229,15 +2257,32 @@ async function handleFile(file){
     i.src = dataUrl;
   });
   if (!img) { toast("这张图读不了"); return; }
-  const edge = S.opts.imgEdge;
-  const scale = Math.min(1, edge / Math.max(img.width, img.height));
+  // 图越大视觉编码越吃内存；内存紧张时系统可能直接杀掉引擎甚至重启手机
+  const want = Math.min(S.opts.imgEdge || 1024, 1280);   // 硬上限 1280
+  const info = nativeInfo();
+  const avail = info && typeof info.ramAvail === "number" ? info.ramAvail : null;
+  if (avail != null && avail < 1.0){
+    toast("可用内存只剩 " + avail.toFixed(1) + " GB，先别发图：容易把手机卡重启", 3400);
+    return;
+  }
+  // 视觉 token 随像素线性增长，单纯限长边对竖图不够；再压一道总像素上限
+  const MAX_PX = 1200000;
+  let edge = want;
+  if (avail != null){
+    if (avail < 1.3) edge = Math.min(edge, 768);
+    else if (avail < 1.8) edge = Math.min(edge, 896);
+  }
+  const scale = Math.min(1,
+    edge / Math.max(img.width, img.height),
+    Math.sqrt(MAX_PX / Math.max(1, img.width * img.height)));
   const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
   const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
   cv.getContext("2d").drawImage(img, 0, 0, w, h);
   const out = cv.toDataURL("image/jpeg", 0.86);
   S.attach = { dataUrl: out, name: file.name, w, h };
   $("#attachImg").src = out;
-  $("#attachName").textContent = `${file.name} · ${img.width}×${img.height} → ${w}×${h}`;
+  $("#attachName").textContent = `${file.name} · ${img.width}×${img.height} → ${w}×${h}`
+    + (scale < Math.min(1, want / Math.max(img.width, img.height)) ? "（已按内存/像素自动适配）" : "");
   $("#attachBar").classList.add("show");
   syncSend();
 }
@@ -2738,6 +2783,7 @@ function paintOpts(){
   $("#swThink").setAttribute("aria-checked", S.opts.think);
   $("#rgTemp").value = S.opts.temp;
   $("#rgMax").value = S.opts.maxTok;
+  if (S.opts.imgEdge > 1280) S.opts.imgEdge = 1280;
   $("#rgImg").value = S.opts.imgEdge;
   $("#swDark").setAttribute("aria-checked", S.opts.dark);
   $("#swStat").setAttribute("aria-checked", S.opts.showStat);
