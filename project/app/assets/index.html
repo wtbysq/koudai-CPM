@@ -313,6 +313,9 @@ input[type=range]::-webkit-slider-thumb{
   box-shadow:0 1px 3px rgba(16,24,40,.14);
 }
 .cavatar img{width:100%;height:100%;object-fit:cover;display:block}
+/* 头像点击热区：26px 太小，四周各放宽 8px */
+.mentionable{position:relative;cursor:pointer}
+.mentionable::after{content:"";position:absolute;inset:-8px;border-radius:50%}
 /* ---------- 新建/编辑联系人面板 ---------- */
 .sheet{position:absolute;inset:0;z-index:70;display:none}
 .sheet.show{display:block}
@@ -1579,19 +1582,43 @@ function renderMemberStrip(s){
 /** 点头像或长按头像都 @ 某人（只触发一次）。 */
 function bindMention(node, c){
   if (!c) return;
-  node.title = "点一下或长按：@" + (c.title || "");
-  let timer = null, fired = false;
+  const nm = String(c.title || "").trim();
+  node.title = "点一下或长按：@" + nm;
+  node.classList.add("mentionable");
+  let timer = null, fired = false, touched = false, sx = 0, sy = 0;
+
   const fire = () => { fired = true; clearTimeout(timer); timer = null; insertMention(c); };
-  node.addEventListener("touchstart", () => {
-    fired = false;
+
+  node.addEventListener("touchstart", e => {
+    touched = true; fired = false;
+    const t = e.touches && e.touches[0];
+    sx = t ? t.clientX : 0; sy = t ? t.clientY : 0;
     clearTimeout(timer);
     timer = setTimeout(fire, 420);
   }, { passive: true });
-  node.addEventListener("touchend", () => clearTimeout(timer));
-  node.addEventListener("touchmove", () => clearTimeout(timer));
-  // 轻点也能 @；长按已经触发过就不再重复
+
+  node.addEventListener("touchmove", e => {
+    const t = e.touches && e.touches[0];
+    // 手指划动（在滚动列表）不算点击
+    if (t && Math.hypot(t.clientX - sx, t.clientY - sy) > 10){
+      clearTimeout(timer);
+      fired = true;
+    }
+  }, { passive: true });
+
+  // 关键：不少 WebView 在滚动容器里的 div 上不会补发 click，
+  // 所以轻点必须在 touchend 里落地，不能只靠 click。
+  node.addEventListener("touchend", () => {
+    clearTimeout(timer);
+    if (!fired) fire();
+    // 触摸标记只用于吞掉紧随其后的合成 click；没有 click 时要自动释放
+    setTimeout(() => { touched = false; }, 700);
+  });
+
+  node.addEventListener("touchcancel", () => { clearTimeout(timer); fired = true; });
+
   node.addEventListener("click", () => {
-    if (fired){ fired = false; return; }
+    if (touched){ touched = false; return; }   // 触摸已处理，忽略补发的 click
     insertMention(c);
   });
 }
