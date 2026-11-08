@@ -34,6 +34,9 @@ testbed/
 *.idsig
 *.zip
 
+# ---- 文档流水线中间产物 ----
+output/
+
 # ---- 工作区元数据 ----
 .workbuddy/
 

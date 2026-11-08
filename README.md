@@ -2,7 +2,7 @@
 
 一台安卓手机上的**完全离线 AI 聊天应用**。会话即联系人：每个 AI 是有名字、头像、人设的独立角色，可以单聊，也可以把多个角色拉进群里聊。模型、语音、数据全部留在本机，除 `127.0.0.1:8080` 外不发起任何网络请求。
 
-- 当前版本：**1.0.0**（versionCode 42，minSdk 28 / targetSdk 34）
+- 当前版本：**1.1.0**（versionCode 43，minSdk 28 / targetSdk 34）
 - 模型：MiniCPM-V 4.7 **1B**（Q4_K_M）+ 视觉投影器，Apache-2.0
 - 语音：SenseVoice 离线识别 + VITS 本地朗读（6 个音色）
 - 界面：原生 JS 单文件，无框架、无构建步骤
@@ -61,7 +61,7 @@
 
 ```bash
 cd project
-BUNDLE_MODELS=0 TARGET_SDK=34 OUT_NAME=koudai-cpm-1.0.0-lite.apk bash app/build-apk.sh
+BUNDLE_MODELS=0 TARGET_SDK=34 OUT_NAME=koudai-cpm-1.1.0-lite.apk bash app/build-apk.sh
 ```
 
 产物在 `project/out/`。`BUNDLE_MODELS=0` 出轻量包（约 17 MB，模型另行导入）；`=1` 会把模型分片打进 APK。
@@ -89,8 +89,8 @@ New-Item -ItemType Junction -Path 'D:\kcpm' -Target 'D:\口袋CPM\project'
 
 安装包与模型包体积较大，不放进仓库，随 Release 附带：
 
-- 下载页：<https://github.com/wtbysq/koudai-CPM/releases/tag/v1.0.0>
-- `koudai-cpm-1.0.0-lite.apk`（17 MB）· `koudai-models-1.0.0.zip`（1.79 GB）· `koudai-voices-1.0.0.zip`（476 MB）
+- 下载页：<https://github.com/wtbysq/koudai-CPM/releases/tag/v1.0.0>（1.1.0 尚未发布，暂指向 1.0.0）
+- `koudai-cpm-1.1.0-lite.apk`（17 MB）· `koudai-models-1.0.0.zip`（1.79 GB）· `koudai-voices-1.0.0.zip`（476 MB）
 
 ## 技术要点
 

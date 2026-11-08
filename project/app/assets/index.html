@@ -926,6 +926,13 @@ const CFG = {
 const NATIVE = window.Koudai || null;
 const HAS = k => !!(NATIVE && typeof NATIVE[k] === "function");
 
+/**
+ * 提示词补丁总开关。1 = 启用（1.1.0 起默认），0 = 回到 1.0.0 原行为。
+ * 只影响「发给模型的文本」，不改变聊天记录、存档与界面显示。
+ */
+const PROMPT_FIX = 1;
+
+
 const S = {
   sessions: [],
   cur: null,
@@ -1297,7 +1304,8 @@ function systemPrompt(s, who){
     if (meNotes) lines.push(meNotes);
     lines.push(nowLine());
     lines.push(`【身份】你的名字只有「${nm}」，不要改成别的名字`
-      + (others.length ? `，也不要说自己是${others.join("、")}` : "") + "。默认中文。");
+      + (others.length ? `，也不要说自己是${others.join("、")}` : "")
+      + "。默认中文。");
     return lines.join("\n");
   }
   const name = ((s && s.title) || "口袋").trim();
@@ -1537,11 +1545,40 @@ function renderHome(){
 }
 
 /** 小模型偶尔会自称别人，这里做最小纠正（只动“我是 X”这种自称，不改正文）。 */
+/**
+ * 回答是不是把用户问句原样倒回来了。
+ * 1B 模型遇到反问句（「你不就是X吗」）会顺着重复一遍，而不是纠正。
+ * 判定纯字面：问句有 60% 以上的连续片段出现在回答里，且回答没比问句长太多。
+ */
+function isEcho(out, ask){
+  if (!PROMPT_FIX) return false;
+  const clean = t => String(t || "").replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "");
+  const A = clean(out), B = clean(ask);
+  if (B.length < 5 || !A) return false;
+  if (A.length > B.length * 1.8) return false;
+  let best = 0;
+  let prev = new Array(B.length + 1).fill(0);
+  for (let i = 1; i <= A.length; i++){
+    const cur = new Array(B.length + 1).fill(0);
+    for (let j = 1; j <= B.length; j++){
+      if (A[i - 1] === B[j - 1]){
+        cur[j] = prev[j - 1] + 1;
+        if (cur[j] > best) best = cur[j];
+      }
+    }
+    prev = cur;
+  }
+  return best >= Math.max(6, B.length * 0.6);
+}
+
 function fixSelfName(text, me, g){
   let out = String(text || "");
   if (!me) return out;
   const my = String(me.title || "").trim();
   if (!my) return out;
+  // 被「你不就是口袋CPM吗」这类追问戳中时，模型会掉到训练里的模型身份
+  // （MiniCPM / 面壁智能 / OpenBMB），这类回答整句不可信，直接换回自己
+  if (PROMPT_FIX && /MiniCPM|面壁智能|OpenBMB|口袋\s*CPM|Koudai\s*CPM/i.test(out)) return `我是${my}。`;
   const others = (g ? membersOf(g) : contacts())
     .filter(x => x.id !== me.id)
     .map(x => String(x.title || "").trim())
@@ -1665,11 +1702,34 @@ function mentionedMember(g, text){
 
 /* ---------------- 长期记忆（记忆卡） ---------------- */
 /** 把记忆条目拼成提示词片段（越靠后越新）。 */
+/** 记忆卡块。 */
 function notesBlock(c){
   const list = (c && c.notes) || [];
   if (!list.length) return "";
   return "你记住的这些事（越靠后越新，别弄混）：\n" + list.map(n => "- " + n.text).join("\n");
 }
+
+/**
+ * 用户自指问句归一化：把「我是谁 / 我叫什么 / 我住哪」里的「我」换成「用户」再发给模型。
+ * 只改发给模型的文本，聊天记录里仍是用户的原话。
+ * 1B 模型对「我是…」有强烈的自我介绍反射，换个说法就绕开了。
+ */
+function normalizeSelfAsk(text){
+  if (!PROMPT_FIX) return text;
+  const t = String(text || "");
+  if (!t || t.length > 120) return text;
+  // 不锚定行首：句子中间出现也要改（「说说我是谁」「你还记得我是谁吗」同样会崩）
+  const pats = [
+    /我(是|叫)(谁|什么|啥)/, /我的名字/, /我叫啥/,
+    /我(做|干)(什么|啥)(工作|的)/, /我是(做|干)(什么|啥)的/,
+    /我(在|最近)(准备|忙|搞|学|考)(什么|啥)/, /我(住|来自)(哪|什么)/,
+    /我(多大|几岁|多少岁)/, /我(养|有)(什么|啥|几只)/,
+  ];
+  if (!pats.some(re => re.test(t))) return text;
+  // 只替换作为主语的第一个「我」（我+是/叫/做/在/住…），避免误伤「给我」「帮我」
+  return t.replace(/我(?=[是叫做的在住来自多养有])/, "用户");
+}
+
 
 /** 清洗一句要记的话：去掉 markdown 符号、压空格、截断。 */
 function cleanNote(text){
@@ -2069,11 +2129,12 @@ async function send(){
     targets = hit.length ? hit : [mem.find(x => x.id === s.lastWho) || mem[0]];
   }
   // 发图前再看一眼内存：视觉编码是整条链路里最容易把系统压垮的一步
+  // 门槛与压缩时保持一致（实测 1.5 GB 就会触发 lowmemorykiller 连环杀进程）
   if (S.attach){
     const info = nativeInfo();
     const avail = info && typeof info.ramAvail === "number" ? info.ramAvail : null;
-    if (avail != null && avail < 0.9){
-      toast("可用内存只剩 " + avail.toFixed(1) + " GB，先发文字吧，图片稍后再试", 3400);
+    if (avail != null && avail < 2.3){
+      toast("可用内存只剩 " + avail.toFixed(1) + " GB，先发文字吧。看图要额外吃 1.3 GB，清一下后台再发更稳", 3800);
       return;
     }
   }
@@ -2132,7 +2193,8 @@ async function replyOne(s, target, g, isLast){
           { type: "text", text: m.text || "描述这张图片" },
         ]});
       } else {
-        msgs.push({ role: "user", content: m.text });
+        // 自指问句（「我是谁」「我叫什么」）先归一化人称再发，避免模型答成自己
+        msgs.push({ role: "user", content: isLastMsg ? normalizeSelfAsk(m.text) : m.text });
       }
     } else if (m.role === "assistant"){
       if (g && m.who !== target.id){
@@ -2226,6 +2288,25 @@ async function replyOne(s, target, g, isLast){
       }
     }
   }finally{
+    // 回声重试：整句照抄用户问句时，换一次说法重答（实测命中约 1%，命中时基本都能改对）
+    if (PROMPT_FIX && !stopped && acc && isEcho(acc, (lastSent && lastSent.text) || "")){
+      try{
+        const r2 = await fetch(CFG.base + "/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...payload, stream: false,
+            temperature: Math.min((S.opts.temp || 0.7) + 0.2, 0.95),
+          }),
+          signal: ac.signal,
+        });
+        if (r2.ok){
+          const j2 = await r2.json();
+          const t2 = String(j2.choices?.[0]?.message?.content || "").trim();
+          if (t2 && !isEcho(t2, (lastSent && lastSent.text) || "")) acc = t2;
+        }
+      }catch(e2){}
+    }
     stopBusy();
     bubble.classList.remove("cursor");
     const tEnd = performance.now();
@@ -2284,20 +2365,27 @@ async function handleFile(file){
     i.src = dataUrl;
   });
   if (!img) { toast("这张图读不了"); return; }
-  // 图越大视觉编码越吃内存；内存紧张时系统可能直接杀掉引擎甚至重启手机
+  // 图越大视觉编码越吃内存；内存紧张时系统可能直接杀掉引擎甚至重启手机。
+  // 门槛依据真机实测（testbed/vision-load-test.py，12 次真实编码）：
+  //   视觉编码的内存峰值稳定在 1.06~1.32 GB，**与图片尺寸几乎无关**（512px 也要 1.06 GB）；
+  //   尺寸只影响耗时（512: 6s → 1280: 42s → 长截图 65s）。
+  //   所以红线 = 峰值 1.3 GB + 系统缓冲 1.0 GB ≈ 2.3 GB；
+  //   1.5 GB 时发图必然把系统压到 critical pressure（实测 LMKD 连环杀进程）。
   const want = Math.min(S.opts.imgEdge || 1024, 1280);   // 硬上限 1280
   const info = nativeInfo();
   const avail = info && typeof info.ramAvail === "number" ? info.ramAvail : null;
-  if (avail != null && avail < 1.0){
-    toast("可用内存只剩 " + avail.toFixed(1) + " GB，先别发图：容易把手机卡重启", 3400);
+  if (avail != null && avail < 2.3){
+    toast("可用内存只剩 " + avail.toFixed(1) + " GB，先别发图：看图要额外吃 1.3 GB，容易把手机卡重启。清一下后台再试", 3800);
     return;
   }
   // 视觉 token 随像素线性增长，单纯限长边对竖图不够；再压一道总像素上限
   const MAX_PX = 1200000;
   let edge = want;
   if (avail != null){
-    if (avail < 1.3) edge = Math.min(edge, 768);
-    else if (avail < 1.8) edge = Math.min(edge, 896);
+    // 降档对内存峰值没帮助（峰值是固定开销），但能显著缩短等待：
+    // 768 约 19s、1024 约 34s、1280 约 42s，时间越短暴露在峰值状态的风险越小
+    if (avail < 2.8) edge = Math.min(edge, 768);
+    else if (avail < 3.2) edge = Math.min(edge, 896);
   }
   const scale = Math.min(1,
     edge / Math.max(img.width, img.height),
@@ -2837,7 +2925,7 @@ function imgHintFor(e){  // 实测（4.7 1B + llama.cpp b11669，PC 8 核）：
   //   1024 381 tok / 首字 10.9s → 商品名 5/6 全对
   if (e <= 560) return "最省时间，小字会读错，只适合看场景";
   if (e <= 700) return "快，但小票/表格这小字基本读不对";
-  if (e <= 1100) return "默认。文字类够用，首字约 11s";
+  if (e <= 1100) return "默认。文字类够用，首字约 11s；内存紧张会自动降档";
   return "细节优先，首字 12s 起";
 }
 function paintTempHint(){
