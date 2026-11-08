@@ -89,7 +89,7 @@ New-Item -ItemType Junction -Path 'D:\kcpm' -Target 'D:\口袋CPM\project'
 
 安装包与模型包体积较大，不放进仓库，随 Release 附带：
 
-- 下载页：<https://github.com/wtbysq/koudai-CPM/releases/tag/v1.0.0>（1.1.0 尚未发布，暂指向 1.0.0）
+- 下载页：<https://github.com/wtbysq/koudai-CPM/releases/tag/v1.1.0>
 - `koudai-cpm-1.1.0-lite.apk`（17 MB）· `koudai-models-1.0.0.zip`（1.79 GB）· `koudai-voices-1.0.0.zip`（476 MB）
 
 ## 技术要点
